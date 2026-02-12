@@ -1,28 +1,6 @@
-"""
-Project configuration module (placeholders only).
-
-Purpose:
-    Centralized configuration for model, training, data paths and reproducibility.
-
-Responsibilities:
-    - Provide a single source of truth for hyperparameters and file paths.
-    - Be simple, serializable (if needed), and imported by other modules.
-
-Must NOT contain:
-    - Hard-coded, environment-specific secrets.
-    - Any heavy logic, I/O, or training code.
-
-Dependencies:
-    - Standard library only (typing, pathlib). No torch or transformers at import-time.
-
-Notes:
-    Fill values in concrete development phases. Keep values explicit and well-documented.
-"""
-
 from pathlib import Path
 from typing import Dict, Any
 
-# Base project directory (adjust at runtime if needed)
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 CONFIG: Dict[str, Any] = {
@@ -54,7 +32,7 @@ CONFIG: Dict[str, Any] = {
         "test_split": 0.1,
     },
     "tokenization": {
-        "percentile_max_length": 95,  # percentile to compute MAX_LENGTH at data prep
+        "percentile_max_length": 95,
     },
     "data": {
         "text_col": "text",
@@ -64,8 +42,7 @@ CONFIG: Dict[str, Any] = {
 
 
 def get_config() -> Dict[str, Any]:
-    """Return a shallow copy of the config to avoid accidental in-place edits."""
     return dict(CONFIG)
 
-# Updated by phase1_data_prep.py
-CONFIG['tokenization']['max_length'] = 72
+
+CONFIG["tokenization"]["max_length"] = 72

@@ -1,22 +1,3 @@
-"""
-Data loading and dataloader creation.
-
-Purpose:
-    - Provide functions to build PyTorch `DataLoader` objects for train/val/test.
-
-Responsibilities:
-    - Create `get_dataloaders(...)` which returns train/val/test DataLoaders.
-    - Encapsulate batching, shuffling, num_workers and collate_fn decision points.
-
-Must NOT contain:
-    - Training loops or evaluation logic.
-    - Hard-coded dataset download steps.
-
-Dependencies:
-    - Will import torch.utils.data when building DataLoaders.
-    - Accept `EmotionDataset` instances or tokenized structures.
-"""
-
 from typing import Optional, Tuple
 
 import torch
@@ -31,13 +12,7 @@ def get_dataloaders(
     test_dataset=None,
     num_workers: int = 0,
 ) -> Tuple[DataLoader, DataLoader, Optional[DataLoader]]:
-    """Return (train_loader, val_loader, test_loader_or_None).
-
-    Batch size is read from CONFIG['training']['batch_size'].
-    num_workers defaults to 0 (Windows-safe).
-    """
-
-    batch_size = CONFIG['training']['batch_size']
+    batch_size = CONFIG["training"]["batch_size"]
     pin_memory = True if torch.cuda.is_available() else False
 
     train_loader = DataLoader(

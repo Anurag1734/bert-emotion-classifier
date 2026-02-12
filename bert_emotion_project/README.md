@@ -1,51 +1,53 @@
-# BERT Emotion Classification (Phase 0)
+# BERT Emotion Classification
 
-Project skeleton for fine-tuning BERT on an emotion classification dataset.
+Fine-tuning `bert-base-uncased` for multiclass emotion classification using a custom PyTorch training loop (no Hugging Face `Trainer`).
 
-Objective
---------
-- Build a clean, modular, production-ready project for BERT fine-tuning.
+## Dataset
+- Hugging Face ID: `shreyaspullehf/emotion_dataset_100k`
+- Task: 10-class emotion detection
 
-Architecture Philosophy
------------------------
-- Single `src/` package for code; clear separation of `data/`, `models/`, `docs/`, and `reports/`.
-- Configuration centralized in `src/config.py`.
-- Small, testable modules that avoid heavy I/O at import time.
+## Project Structure
+- `src/config.py`: central configuration
+- `src/dataset.py`: PyTorch `Dataset`
+- `src/model.py`: BERT + classifier head
+- `src/optimizer.py`: AdamW + linear warmup/decay scheduler
+- `src/trainer.py`: training/validation/test loop, early stopping, checkpointing
+- `src/evaluator.py`: metrics + confusion matrix plotting
+- `src/inference.py`: `predict_text(text)` inference API
+- `scripts/phase1_data_prep.py`: EDA, MAX_LENGTH calculation, summary generation
+- `scripts/phase4_train.py`: end-to-end training and evaluation
 
-Phase-based Development
------------------------
-Phase 0 focuses on project structure, configuration, and reproducible utilities. Training,
-model forward pass, and data integration will be implemented in subsequent phases.
-
-Environment setup (Phase 1)
----------------------------
-Create an isolated Python virtual environment before installing dependencies. Do NOT use your global Python.
-
-If Windows (PowerShell):
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-If Mac / Linux (bash/zsh):
-
+## Setup
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 ```
 
-Notes:
-- The repo includes a `scripts/phase1_data_prep.py` script to load the dataset, perform EDA,
-  create a stratified validation split, compute percentile-based `MAX_LENGTH`, and save plots
-  to `reports/figures/`.
-- Run the script after activating the virtual environment:
-
+## Run
+1. Generate EDA artifacts and update tokenization max length:
 ```bash
-python scripts/phase1_data_prep.py
+uv run python scripts/phase1_data_prep.py
 ```
 
-The script will generate `data/processed/` artifacts and `docs/PHASE_1_DATA_SUMMARY.md` with
-dataset statistics. See that file for detailed results after running.
+2. Train and evaluate:
+```bash
+uv run python scripts/phase4_train.py
+```
+
+3. Run sample inference:
+```bash
+uv run python -m bert_emotion_project.src.inference
+```
+
+## Outputs
+- Best model checkpoint: `models/best_model.pt`
+- Training log: `reports/training_log.csv`
+- Label/text-length plots: `reports/figures/`
+- Confusion matrix: `reports/figures/confusion_matrix.png`
+- Data summary: `docs/PHASE_1_DATA_SUMMARY.md`
+
+## Metrics Reported
+- Accuracy
+- Precision (weighted)
+- Recall (weighted)
+- F1 score (macro and weighted)
+- Confusion matrix

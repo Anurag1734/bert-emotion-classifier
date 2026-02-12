@@ -1,14 +1,3 @@
-"""
-Inference utilities and prediction wrappers.
-
-Purpose:
-    - Provide `predict_text(text)` high-level interface.
-
-Responsibilities:
-    - Tokenize single samples, run forward pass, apply softmax,
-      and return label + confidence.
-"""
-
 import torch
 import torch.nn.functional as F
 from pathlib import Path
@@ -18,65 +7,50 @@ from transformers import AutoTokenizer
 from bert_emotion_project.src.config import CONFIG
 from bert_emotion_project.src.model import EmotionClassifier
 
+_INFER_STATE = None
 
-def predict_text(text: str) -> dict:
-    """
-    Predict emotion for a single input text.
 
-    Args:
-        text (str): Raw input string.
+def _load_inference_state():
+    global _INFER_STATE
+    if _INFER_STATE is not None:
+        return _INFER_STATE
 
-    Returns:
-        dict:
-            {
-                "label": predicted_class_name (string),
-                "confidence": float_value
-            }
-    """
-
-    # -------------------------------
-    # Device
-    # -------------------------------
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokenizer = AutoTokenizer.from_pretrained(CONFIG["model"]["pretrained_model_name"])
 
-    # -------------------------------
-    # Load tokenizer
-    # -------------------------------
-    tokenizer = AutoTokenizer.from_pretrained(
-        CONFIG["model"]["pretrained_model_name"]
-    )
-
-    # -------------------------------
-    # Load dataset to obtain class names (same ordering as training)
-    # -------------------------------
     ds = load_dataset(CONFIG["dataset"]["hf_identifier"])
     full_dataset = ds["train"]
-
-    text_col = "sentence" if "sentence" in full_dataset.column_names else "text"
     label_col = "emotion" if "emotion" in full_dataset.column_names else "label"
+    class_names = list(full_dataset.features[label_col].names)
 
-    class_names = sorted(list(set(full_dataset[label_col])))
-
-    # -------------------------------
-    # Initialize model
-    # -------------------------------
     model = EmotionClassifier(
-        num_labels=CONFIG["model"]["num_labels"],
+        num_labels=len(class_names),
         dropout_prob=CONFIG["model"]["dropout"],
         pretrained_model_name=CONFIG["model"]["pretrained_model_name"],
     )
 
-    # -------------------------------
-    # Load saved weights
-    # -------------------------------
     checkpoint_path = Path(CONFIG["paths"]["models"]) / "best_model.pt"
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
+    state_dict = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
 
-    # -------------------------------
-    # Tokenize input
-    # -------------------------------
+    _INFER_STATE = {
+        "device": device,
+        "tokenizer": tokenizer,
+        "model": model,
+        "class_names": class_names,
+    }
+    return _INFER_STATE
+
+
+def predict_text(text: str) -> dict:
+    state = _load_inference_state()
+    device = state["device"]
+    tokenizer = state["tokenizer"]
+    model = state["model"]
+    class_names = state["class_names"]
+
     encoding = tokenizer(
         text,
         padding="max_length",
@@ -88,9 +62,6 @@ def predict_text(text: str) -> dict:
     input_ids = encoding["input_ids"].to(device)
     attention_mask = encoding["attention_mask"].to(device)
 
-    # -------------------------------
-    # Forward pass
-    # -------------------------------
     with torch.no_grad():
         logits = model(input_ids, attention_mask)
         probabilities = F.softmax(logits, dim=1)
@@ -100,10 +71,7 @@ def predict_text(text: str) -> dict:
 
     predicted_label = class_names[predicted_index]
 
-    return {
-        "label": predicted_label,
-        "confidence": confidence
-    }
+    return {"label": predicted_label, "confidence": confidence}
 
 
 if __name__ == "__main__":
@@ -112,7 +80,7 @@ if __name__ == "__main__":
         "I just got promoted at work!",
         "That noise scared me.",
         "I'm embarrassed about what I said.",
-        "I love spending time with my family."
+        "I love spending time with my family.",
     ]
 
     for text in examples:

@@ -1,19 +1,3 @@
-"""Phase 1 — strict data summary using HuggingFace `load_dataset` only.
-
-This script follows the Phase 1 rules exactly:
- - Uses `datasets.load_dataset("shreyaspullehf/emotion_dataset_100k")` only.
- - No fallback logic, no huggingface_hub, no authentication, no CSV handling.
- - Computes tokenized lengths with `bert-base-uncased` tokenizer.
- - Computes 95th percentile of token lengths and rounds MAX_LENGTH to a multiple
-   of 8.
- - Performs stratified 90/10 split using `train_test_split(stratify_by_column="label")`.
- - Saves plots to `reports/figures/` and writes a populated `docs/PHASE_1_DATA_SUMMARY.md`.
- - Updates `src/config.py` tokenization `max_length` value in-place.
-
-Run locally in Python 3.11 inside the project's venv. This script will error
-immediately if `load_dataset` fails — that is intentional per the rules.
-"""
-
 from __future__ import annotations
 
 import math
@@ -33,9 +17,10 @@ def round_up_multiple(x: int, base: int = 8) -> int:
     return int(math.ceil(x / base) * base)
 
 
-def compute_and_save_plots(lengths: np.ndarray, label_counts: Dict[str, int], out_dir: str):
+def compute_and_save_plots(
+    lengths: np.ndarray, label_counts: Dict[str, int], out_dir: str
+):
     os.makedirs(out_dir, exist_ok=True)
-    # lengths histogram
     plt.figure(figsize=(8, 4))
     sns.histplot(lengths, bins=50, kde=False)
     plt.xlabel("Token length")
@@ -46,7 +31,6 @@ def compute_and_save_plots(lengths: np.ndarray, label_counts: Dict[str, int], ou
     plt.savefig(p1)
     plt.close()
 
-    # label distribution
     plt.figure(figsize=(8, 4))
     labels = list(label_counts.keys())
     counts = [label_counts[k] for k in labels]
@@ -88,8 +72,8 @@ def build_summary_md(stats: Dict, out_md_path: str, figures: Dict[str, str]):
         "Label | Count | Proportion",
         "--- | --- | ---",
     ]
-    for lbl, cnt in stats['label_counts'].items():
-        prop = cnt / stats['n_samples']
+    for lbl, cnt in stats["label_counts"].items():
+        prop = cnt / stats["n_samples"]
         lines.append(f"{lbl} | {cnt} | {prop:.4f}")
 
     lines += [
@@ -117,59 +101,41 @@ def build_summary_md(stats: Dict, out_md_path: str, figures: Dict[str, str]):
 
 
 def update_config_max_length(config_path: str, chosen_max_length: int):
-    # Safely add or replace CONFIG['tokenization']['max_length'] in src/config.py
     text = open(config_path, "r", encoding="utf-8").read()
     assign_line = f"CONFIG['tokenization']['max_length'] = {chosen_max_length}\n"
     if "CONFIG['tokenization']['max_length']" in text:
-        # replace existing assignment
         import re
 
-        text = re.sub(r"CONFIG\['tokenization'\]\['max_length'\]\s*=\s*\d+\s*\n", assign_line, text)
+        text = re.sub(
+            r"CONFIG\['tokenization'\]\['max_length'\]\s*=\s*\d+\s*\n",
+            assign_line,
+            text,
+        )
     else:
-        # append assignment at end
         text = text.rstrip() + "\n\n# Updated by phase1_data_prep.py\n" + assign_line
     open(config_path, "w", encoding="utf-8").write(text)
 
 
 def main():
-    # Strict defaults — no options to change data source per rules
     dataset_id = "shreyaspullehf/emotion_dataset_100k"
-    text_col = "text"
-    label_col = "label"
     percentile = 95
     round_base = 8
     val_frac = 0.1
     seed = 42
-    out_md = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "PHASE_1_DATA_SUMMARY.md")
-    fig_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "reports", "figures")
+    out_md = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "docs", "PHASE_1_DATA_SUMMARY.md"
+    )
+    fig_dir = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "reports", "figures"
+    )
 
-    # Load dataset (must be public and available via load_dataset)
     ds = load_dataset(dataset_id)
-
-    if "train" not in ds:
-        raise SystemExit(f"Dataset {dataset_id} does not contain a 'train' split")
-
     train_split = ds["train"]
-
-    # Auto-detect text and label columns if defaults not present
-    cols = train_split.column_names
-    if "text" in cols:
-        text_col = "text"
-    elif "sentence" in cols:
-        text_col = "sentence"
-    else:
-        text_col = cols[0]
-
-    if "label" in cols:
-        label_col = "label"
-    elif "emotion" in cols:
-        label_col = "emotion"
-    else:
-        label_col = cols[1] if len(cols) > 1 else cols[0]
-
+    columns = set(train_split.column_names)
+    text_col = "text" if "text" in columns else "sentence"
+    label_col = "label" if "label" in columns else "emotion"
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=True)
 
-    # Compute token lengths using tokenizer (batched)
     lengths = []
     batch_size = 1024
     for i in range(0, len(train_split), batch_size):
@@ -187,32 +153,36 @@ def main():
     chosen = round_up_multiple(p95_length, base=round_base)
     truncation_ratio = float((lengths > chosen).sum() / n_samples)
 
-    # Label counts
     label_counter = Counter(train_split[label_col])
     majority = max(label_counter.values())
     minority = min(label_counter.values())
     imbalance_ratio = majority / minority if minority > 0 else float("inf")
 
-    # Ensure label column is ClassLabel for stratified split
     from datasets import ClassLabel
+
     label_names = sorted(list(set(train_split[label_col])))
     class_label = ClassLabel(names=label_names)
     train_split = train_split.cast_column(label_col, class_label)
 
-    # Stratified 90/10 split
-    split = train_split.train_test_split(test_size=val_frac, stratify_by_column=label_col, seed=seed)
+    split = train_split.train_test_split(
+        test_size=val_frac, stratify_by_column=label_col, seed=seed
+    )
     new_train = split["train"]
     val_split = split["test"]
 
-    # Proportion differences
-    t_df = pd.DataFrame({text_col: new_train[text_col], label_col: new_train[label_col]})
-    v_df = pd.DataFrame({text_col: val_split[text_col], label_col: val_split[label_col]})
+    t_df = pd.DataFrame(
+        {text_col: new_train[text_col], label_col: new_train[label_col]}
+    )
+    v_df = pd.DataFrame(
+        {text_col: val_split[text_col], label_col: val_split[label_col]}
+    )
     full_props = t_df[label_col].value_counts(normalize=True).sort_index()
-    val_props = v_df[label_col].value_counts(normalize=True).reindex(full_props.index).fillna(0)
+    val_props = (
+        v_df[label_col].value_counts(normalize=True).reindex(full_props.index).fillna(0)
+    )
     prop_diff = (full_props - val_props).abs()
     max_prop_diff = float(prop_diff.max())
 
-    # Save plots
     figures = {}
     fig_len, fig_lab = compute_and_save_plots(lengths, dict(label_counter), fig_dir)
     figures["length"] = fig_len
@@ -237,174 +207,18 @@ def main():
         "max_prop_diff": max_prop_diff,
     }
 
-    # Update config.py with computed MAX_LENGTH
-    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "src", "config.py")
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "src", "config.py"
+    )
     update_config_max_length(config_path, chosen)
 
-    # Build and write PHASE 1 summary
     build_summary_md(stats, out_md, figures)
 
-    # Print key results for the runner
     print(f"95th percentile (tokens): {p95_length}")
     print(f"MAX_LENGTH chosen (rounded to {round_base}): {chosen}")
     print(f"truncation_ratio: {truncation_ratio:.4f}")
     print(f"imbalance_ratio (maj/min): {imbalance_ratio:.2f}")
     print(f"PHASE 1 summary written to: {out_md}")
-
-
-if __name__ == "__main__":
-    main()
-
-
-
-def update_config_max_length(max_length: int):
-    cfg_path = SRC / "config.py"
-    template = f'''"""
-Project configuration module (placeholders only).
-
-Purpose:
-    Centralized configuration for model, training, data paths and reproducibility.
-
-Responsibilities:
-    - Provide a single source of truth for hyperparameters and file paths.
-    - Be simple, serializable (if needed), and imported by other modules.
-
-Must NOT contain:
-    - Hard-coded, environment-specific secrets.
-    - Any heavy logic, I/O, or training code.
-
-Dependencies:
-    - Standard library only (typing, pathlib). No torch or transformers at import-time.
-
-Notes:
-    Fill values in concrete development phases. Keep values explicit and well-documented.
-"""
-
-from pathlib import Path
-from typing import Dict, Any
-
-# Base project directory (adjust at runtime if needed)
-ROOT_DIR = Path(__file__).resolve().parents[1]
-
-CONFIG: Dict[str, Any] = {{
-    "seed": 42,
-    "paths": {{
-        "root": str(ROOT_DIR),
-        "data_raw": str(ROOT_DIR / "data" / "raw"),
-        "data_processed": str(ROOT_DIR / "data" / "processed"),
-        "models": str(ROOT_DIR / "models"),
-        "reports": str(ROOT_DIR / "reports"),
-    }},
-    "model": {{
-        "pretrained_model_name": "bert-base-uncased",
-        "num_labels": 6,  # placeholder, set after inspecting dataset
-        "hidden_dropout_prob": 0.1,
-        "classifier_hidden": 256,
-    }},
-    "training": {{
-        "batch_size": 32,
-        "epochs": 10,
-        "learning_rate": 2e-5,
-        "weight_decay": 0.01,
-        "warmup_proportion": 0.1,
-        "max_grad_norm": 1.0,
-        "early_stopping_patience": 3,
-        "validation_split": 0.1,  # stratified split percentage
-        "test_split": 0.1,
-    }},
-    "tokenization": {{
-        "percentile_max_length": 95,  # percentile to compute MAX_LENGTH at data prep
-        "max_length": {max_length},
-    }},
-}}
-
-
-def get_config() -> Dict[str, Any]:
-    """Return a shallow copy of the config to avoid accidental in-place edits."""
-    return dict(CONFIG)
-
-'''
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        f.write(template)
-    print(f"Updated config.py with MAX_LENGTH={max_length}")
-
-
-def write_summary(stats: dict, train_df: pd.DataFrame, val_df: pd.DataFrame, max_length: int, label_plot_path: Path, length_plot_path: Path):
-    summary_path = DOCS / "PHASE_1_DATA_SUMMARY.md"
-    try:
-        import pkg_resources
-        installed = {pkg.key: pkg.version for pkg in pkg_resources.working_set}
-    except Exception:
-        installed = {}
-
-    with open(summary_path, "w", encoding="utf-8") as f:
-        f.write("# PHASE 1 — Data Summary\n\n")
-        f.write("This file is generated by the integrated Phase 1 run. It summarizes dataset statistics, EDA artifacts, tokenized length analysis, and the percentile-based `MAX_LENGTH` decision.\n\n")
-
-        f.write("## Environment and installed package versions\n")
-        for pkg in ["datasets", "transformers", "pandas", "numpy", "matplotlib", "seaborn"]:
-            f.write(f"- {pkg}: {installed.get(pkg, 'not-found')}\n")
-        f.write("\n")
-
-        f.write("## Dataset statistics\n")
-        f.write(f"- Total training samples: {stats.get('n_samples', 'N/A')}\n")
-        f.write(f"- Character length mean: {stats.get('char_mean', 'N/A'):.2f}\n")
-        f.write(f"- Character length median: {stats.get('char_median', 'N/A'):.2f}\n")
-        f.write(f"- Character length max: {stats.get('char_max', 'N/A')}\n")
-        f.write(f"- Character length 95th percentile: {stats.get('char_95pct', 'N/A')}\n\n")
-
-        f.write("## Tokenized length statistics\n")
-        f.write(f"- Token length mean: {stats.get('token_mean', 'N/A'):.2f}\n")
-        f.write(f"- Token length median: {stats.get('token_median', 'N/A'):.2f}\n")
-        f.write(f"- Token length max: {stats.get('token_max', 'N/A')}\n")
-        f.write(f"- Token length 95th percentile: {stats.get('token_95pct', 'N/A')}\n\n")
-
-        f.write("## Label distribution (train)\n")
-        f.write("Label | Count\n")
-        f.write("--- | ---\n")
-        for lbl, cnt in stats.get('label_counts', {}).items():
-            f.write(f"{lbl} | {cnt}\n")
-        f.write("\n")
-
-        f.write("## Imbalance analysis\n")
-        counts = np.array(list(stats.get('label_counts', {}).values()))
-        if counts.size > 0:
-            majority = counts.max()
-            minority = counts.min()
-            imbalance_ratio = float(majority / minority) if minority > 0 else float('inf')
-        else:
-            imbalance_ratio = 'N/A'
-        f.write(f"- Imbalance ratio (majority/minority): {imbalance_ratio}\n\n")
-
-        f.write("## Validation split\n")
-        f.write(f"- Train size: {len(train_df)}\n")
-        f.write(f"- Validation size: {len(val_df)}\n\n")
-
-        f.write("## MAX_LENGTH decision\n")
-        f.write(f"- Tokenized 95th percentile: {stats.get('token_95pct', 'N/A')} tokens\n")
-        f.write(f"- Final MAX_LENGTH (rounded to multiple of 8): {max_length} tokens\n")
-        f.write("- Rationale: Bound sequence length at 95th percentile to balance memory and coverage; rounding to multiple of 8 improves batching efficiency on accelerators.\n\n")
-
-        f.write("## Plots saved\n")
-        f.write(f"- Label distribution: {label_plot_path}\n")
-        f.write(f"- Token length distribution: {length_plot_path}\n\n")
-
-        f.write("## Assumptions\n")
-        f.write("- The dataset's train split contains `text` and `label` fields.\n")
-        f.write("- Token lengths computed with `BertTokenizerFast.from_pretrained('bert-base-uncased')` and no truncation.\n")
-
-    print(f"Wrote populated summary to {summary_path}")
-
-
-def main():
-    ensure_dirs()
-    ds = load_dataset_train()
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased", use_fast=True)
-    df, stats, label_plot_path, length_plot_path = eda_and_plots_from_dataset(ds, tokenizer)
-    train_split, val_split = stratified_split_and_save(ds, validation_fraction=0.1, seed=42)
-    max_length = compute_max_length(stats["token_95pct"])
-    update_config_max_length(max_length)
-    write_summary(stats, train_split, val_split, max_length, label_plot_path, length_plot_path)
 
 
 if __name__ == "__main__":
