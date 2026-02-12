@@ -46,3 +46,6 @@ def get_config() -> Dict[str, Any]:
 
 
 CONFIG["tokenization"]["max_length"] = 72
+
+# Updated by phase1_data_prep.py
+CONFIG['tokenization']['max_length'] = 72

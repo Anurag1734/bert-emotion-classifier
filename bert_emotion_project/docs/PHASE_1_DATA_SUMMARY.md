@@ -43,8 +43,8 @@ surprise | 9925 | 0.0995
 - Max absolute difference in class proportions (train vs val): 0.0001
 
 ## Plots
-- Label distribution: /home/wazupsteve/bert/bert-emotion-classifier/bert_emotion_project/reports/figures/label_distribution.png
-- Token length distribution: /home/wazupsteve/bert/bert-emotion-classifier/bert_emotion_project/reports/figures/text_length_distribution.png
+- Label distribution: /home/mluser/bert-emotion-classifier/bert_emotion_project/reports/figures/label_distribution.png
+- Token length distribution: /home/mluser/bert-emotion-classifier/bert_emotion_project/reports/figures/text_length_distribution.png
 
 ## Notes
 - Tokenization: bert-base-uncased (transformers AutoTokenizer)
