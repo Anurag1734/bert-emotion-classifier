@@ -10,6 +10,19 @@ from bert_emotion_project.src.model import EmotionClassifier
 _INFER_STATE = None
 
 
+def _get_class_names(dataset, label_col):
+    feature = dataset.features[label_col]
+    names = getattr(feature, "names", None)
+    if names:
+        return list(names)
+
+    labels = dataset[label_col]
+    unique = sorted(set(labels))
+    if unique and isinstance(unique[0], str):
+        return unique
+    return [str(x) for x in unique]
+
+
 def _load_inference_state():
     global _INFER_STATE
     if _INFER_STATE is not None:
@@ -21,7 +34,7 @@ def _load_inference_state():
     ds = load_dataset(CONFIG["dataset"]["hf_identifier"])
     full_dataset = ds["train"]
     label_col = "emotion" if "emotion" in full_dataset.column_names else "label"
-    class_names = list(full_dataset.features[label_col].names)
+    class_names = _get_class_names(full_dataset, label_col)
 
     model = EmotionClassifier(
         num_labels=len(class_names),

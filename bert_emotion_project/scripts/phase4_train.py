@@ -1,16 +1,30 @@
+import sys
 from pathlib import Path
 from datasets import load_dataset
 from transformers import AutoTokenizer
 from datasets import ClassLabel
 
-from bert_emotion_project.src.config import CONFIG
-from bert_emotion_project.src.dataset import EmotionDataset
-from bert_emotion_project.src.data_loader import get_dataloaders
-from bert_emotion_project.src.model import EmotionClassifier
-from bert_emotion_project.src.optimizer import build_optimizer, build_scheduler
-from bert_emotion_project.src.trainer import Trainer
-from bert_emotion_project.src.evaluator import plot_confusion_matrix
-from bert_emotion_project.src.seed import set_seed
+try:
+    from bert_emotion_project.src.config import CONFIG
+    from bert_emotion_project.src.dataset import EmotionDataset
+    from bert_emotion_project.src.data_loader import get_dataloaders
+    from bert_emotion_project.src.model import EmotionClassifier
+    from bert_emotion_project.src.optimizer import build_optimizer, build_scheduler
+    from bert_emotion_project.src.trainer import Trainer
+    from bert_emotion_project.src.evaluator import plot_confusion_matrix
+    from bert_emotion_project.src.seed import set_seed
+except ModuleNotFoundError as exc:
+    if exc.name != "bert_emotion_project":
+        raise
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from bert_emotion_project.src.config import CONFIG
+    from bert_emotion_project.src.dataset import EmotionDataset
+    from bert_emotion_project.src.data_loader import get_dataloaders
+    from bert_emotion_project.src.model import EmotionClassifier
+    from bert_emotion_project.src.optimizer import build_optimizer, build_scheduler
+    from bert_emotion_project.src.trainer import Trainer
+    from bert_emotion_project.src.evaluator import plot_confusion_matrix
+    from bert_emotion_project.src.seed import set_seed
 
 
 def create_splits(dataset, label_col, val_ratio=0.1, test_ratio=0.1, seed=42):
